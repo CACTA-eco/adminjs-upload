@@ -1,10 +1,10 @@
 import { UploadedFile } from 'adminjs'
 import fs from 'fs'
 // eslint-disable-next-line import/no-extraneous-dependencies
-import { DeleteObjectCommandOutput, GetObjectCommand, PutObjectCommandInput, PutObjectCommandOutput, S3 } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, DeleteObjectCommandOutput, GetObjectCommand, PutObjectCommand, PutObjectCommandInput, PutObjectCommandOutput, S3Client } from '@aws-sdk/client-s3'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { DAY_IN_MINUTES, ERROR_MESSAGES } from '../constants.js'
+import { DAY_IN_MINUTES } from '../constants.js'
 import { BaseProvider } from './base-provider.js'
 
 /**
@@ -35,31 +35,33 @@ export type AWSOptions = {
    * Default to 24h. If set to 0 adapter will mark uploaded files as PUBLIC ACL.
    */
   expires?: number;
-}
 
-let AWS_S3
-try {
-  // eslint-disable-next-line import/no-extraneous-dependencies
-  const AWS = await import('@aws-sdk/client-s3')
-  AWS_S3 = AWS?.S3
-} catch (error) {
-  AWS_S3 = null
+  /**
+   * AWS endpoint. By default it is set to 's3.amazonaws.com'
+   */
+  endpoint?: string;
 }
 
 export class AWSProvider extends BaseProvider {
-  protected s3: S3
+  protected s3: S3Client
 
   public expires: number
+
+  public endpoint?: string
 
   constructor(options: AWSOptions) {
     super(options.bucket)
 
-    if (!AWS_S3) {
-      throw new Error(ERROR_MESSAGES.NO_AWS_SDK)
-    }
-
     this.expires = options.expires ?? DAY_IN_MINUTES
-    this.s3 = new AWS_S3(options)
+    this.endpoint = options.endpoint
+    this.s3 = new S3Client({
+      region: options.region,
+      endpoint: options.endpoint,
+      credentials: {
+        accessKeyId: options.accessKeyId ?? 'XXX',
+        secretAccessKey: options.secretAccessKey ?? 'XXX',
+      },
+    })
   }
 
   public async upload(file: UploadedFile, key: string): Promise<PutObjectCommandOutput> {
@@ -72,11 +74,18 @@ export class AWSProvider extends BaseProvider {
     if (!this.expires) {
       params.ACL = 'public-read'
     }
-    return this.s3.putObject(params)
+
+    const putObject = new PutObjectCommand(params)
+
+    return this.s3.send(putObject)
   }
 
   public async delete(key: string, bucket: string): Promise<DeleteObjectCommandOutput> {
-    return this.s3.deleteObject({ Key: key, Bucket: bucket })
+    const deleteObject = new DeleteObjectCommand({
+      Key: key,
+      Bucket: bucket,
+    })
+    return this.s3.send(deleteObject)
   }
 
   public async path(key: string, bucket: string): Promise<string> {
@@ -87,6 +96,11 @@ export class AWSProvider extends BaseProvider {
         { expiresIn: this.expires },
       )
     }
+
+    if (this.endpoint) {
+      return `${this.endpoint}/${bucket}/${key}`
+    }
+
     // https://bucket.s3.amazonaws.com/key
     return `https://${bucket}.s3.amazonaws.com/${key}`
   }
