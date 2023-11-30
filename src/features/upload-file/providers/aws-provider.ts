@@ -71,6 +71,7 @@ export class AWSProvider extends BaseProvider {
       Bucket: this.bucket,
       Key: key,
       Body: tmpFile,
+      ContentType: file.type,
     }
 
     const putObject = new PutObjectCommand(params)
