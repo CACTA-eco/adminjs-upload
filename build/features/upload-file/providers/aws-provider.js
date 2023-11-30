@@ -16,6 +16,7 @@ export class AWSProvider extends BaseProvider {
         this.s3 = new S3Client({
             region: options.region,
             endpoint: options.endpoint,
+            forcePathStyle: true,
             credentials: {
                 accessKeyId: options.accessKeyId ?? 'XXX',
                 secretAccessKey: options.secretAccessKey ?? 'XXX',
@@ -29,9 +30,6 @@ export class AWSProvider extends BaseProvider {
             Key: key,
             Body: tmpFile,
         };
-        if (!this.expires) {
-            params.ACL = 'public-read';
-        }
         const putObject = new PutObjectCommand(params);
         return this.s3.send(putObject);
     }
